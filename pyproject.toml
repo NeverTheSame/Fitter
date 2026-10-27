@@ -1,0 +1,13 @@
+[project]
+name = "fitter"
+version = "0.1.0"
+description = "2D photo virtual try-on (Phase 1 skeleton)"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = []
+
+[tool.setuptools]
+packages = ["fitter", "fitter.api", "fitter.worker"]
+
+[tool.setuptools.package-data]
+fitter = ["static/*"]

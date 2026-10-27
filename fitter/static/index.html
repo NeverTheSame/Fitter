@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fitter</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto; padding: 16px; background: #fafafa; color: #222; }
+  h1 { margin: 0 0 4px; } .muted { color: #777; font-size: 14px; }
+  section { background: #fff; border-radius: 12px; padding: 16px; margin: 12px 0; box-shadow: 0 1px 3px #0001; }
+  img.preview { max-width: 100%; max-height: 200px; display: block; margin-top: 8px; border-radius: 8px; }
+  button { padding: 10px 16px; border: 0; border-radius: 8px; background: #222; color: #fff; font-size: 15px; cursor: pointer; }
+  button:disabled { opacity: .4; }
+  input[type=url] { width: 100%; padding: 8px; box-sizing: border-box; margin: 8px 0; }
+  canvas { width: 100%; border-radius: 8px; }
+  .err { color: #c00; }
+</style>
+</head>
+<body>
+<h1>Fitter</h1>
+<div class="muted">Demo build — try-on engine is a placeholder. Free try-ons left: <b id="free">…</b></div>
+
+<section>
+  <h3>1. Your photo</h3>
+  <input type="file" accept="image/*" id="selfieFile">
+  <img class="preview" id="selfieImg" hidden>
+</section>
+
+<section>
+  <h3>2. Garment</h3>
+  <input type="file" accept="image/*" id="garmentFile">
+  <div class="muted">…or paste a product URL</div>
+  <input type="url" id="garmentUrl" placeholder="https://shop.example.com/products/shirt">
+  <button id="fetchBtn">Fetch</button>
+  <img class="preview" id="garmentImg" hidden crossorigin="anonymous">
+</section>
+
+<section>
+  <h3>3. Try on</h3>
+  <button id="tryBtn" disabled>Try it on</button>
+  <div id="status" class="muted"></div>
+  <canvas id="out" hidden></canvas>
+</section>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let selfie = null, garment = null;
+
+const refreshFree = () => fetch('/api/me').then(r => r.json()).then(d => $('free').textContent = d.free_left);
+const ready = () => $('tryBtn').disabled = !(selfie && garment);
+const readFile = (f) => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(f); });
+const show = (img, src) => { img.src = src; img.hidden = false; };
+
+$('selfieFile').onchange = async (e) => { selfie = await readFile(e.target.files[0]); show($('selfieImg'), selfie); ready(); };
+$('garmentFile').onchange = async (e) => { garment = await readFile(e.target.files[0]); show($('garmentImg'), garment); ready(); };
+$('fetchBtn').onclick = async () => {
+  const g = await fetch('/api/garments/from-url', { method: 'POST', body: JSON.stringify({ url: $('garmentUrl').value }) }).then(r => r.json());
+  garment = g.image; show($('garmentImg'), garment); ready();
+};
+
+$('tryBtn').onclick = async () => {
+  $('status').className = 'muted';
+  const r = await fetch('/api/tryons', { method: 'POST', body: JSON.stringify({ selfie, garment }) });
+  const body = await r.json();
+  if (!r.ok) { $('status').className = 'err'; $('status').textContent = body.error; return; }
+  refreshFree();
+  poll(body.id);
+};
+
+async function poll(id) {
+  const job = await fetch('/api/tryons/' + id).then(r => r.json());
+  $('status').textContent = `${job.status}${job.step ? ' · ' + job.step : ''} · $${job.cost_usd.toFixed(3)}`;
+  if (job.status === 'failed') { $('status').className = 'err'; $('status').textContent = job.error; return; }
+  if (job.status === 'done') return render(job.render);
+  setTimeout(() => poll(id), 500);
+}
+
+// Draw the engine's render if there is one; otherwise (FakeEngine) paste the
+// garment over the torso of the selfie.
+async function render(engineImage) {
+  const load = (src) => new Promise(r => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => r(i); i.src = src; });
+  const c = $('out'), ctx = c.getContext('2d');
+  if (engineImage) {
+    const img = await load(engineImage);
+    c.width = img.width; c.height = img.height; ctx.drawImage(img, 0, 0); c.hidden = false;
+    return;
+  }
+  const [s, g] = await Promise.all([load(selfie), load(garment)]);
+  c.width = s.width; c.height = s.height;
+  ctx.drawImage(s, 0, 0);
+  const w = s.width * 0.5, h = w * g.height / g.width;
+  ctx.globalAlpha = 0.85;
+  ctx.drawImage(g, (s.width - w) / 2, s.height * 0.3, w, h);
+  ctx.globalAlpha = 1;
+  c.hidden = false;
+}
+
+refreshFree();
+</script>
+</body>
+</html>
