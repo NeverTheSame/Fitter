@@ -7,7 +7,7 @@ license = { text = "MIT" }
 dependencies = []
 
 [tool.setuptools]
-packages = ["fitter", "fitter.api", "fitter.worker"]
+packages = ["fitter", "fitter.api", "fitter.engines", "fitter.worker"]
 
 [tool.setuptools.package-data]
 fitter = ["static/*"]

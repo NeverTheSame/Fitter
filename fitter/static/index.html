@@ -58,21 +58,41 @@ $('fetchBtn').onclick = async () => {
   garment = g.image; show($('garmentImg'), garment); ready();
 };
 
+const setStatus = (text, isError) => { $('status').className = isError ? 'err' : 'muted'; $('status').textContent = text; };
+const finish = (text, isError) => { setStatus(text, isError); ready(); refreshFree(); };
+
 $('tryBtn').onclick = async () => {
-  $('status').className = 'muted';
-  const r = await fetch('/api/tryons', { method: 'POST', body: JSON.stringify({ selfie, garment }) });
-  const body = await r.json();
-  if (!r.ok) { $('status').className = 'err'; $('status').textContent = body.error; return; }
+  $('tryBtn').disabled = true;
+  $('out').hidden = true;
+  setStatus('submitting…');
+  let r, body;
+  try {
+    r = await fetch('/api/tryons', { method: 'POST', body: JSON.stringify({ selfie, garment }) });
+    body = await r.json();
+  } catch (e) {
+    return finish('Could not reach the server. Please try again.', true);
+  }
+  if (!r.ok) return finish(body.error, true);
   refreshFree();
-  poll(body.id);
+  poll(body.id, 0);
 };
 
-async function poll(id) {
-  const job = await fetch('/api/tryons/' + id).then(r => r.json());
-  $('status').textContent = `${job.status}${job.step ? ' · ' + job.step : ''} · $${job.cost_usd.toFixed(3)}`;
-  if (job.status === 'failed') { $('status').className = 'err'; $('status').textContent = job.error; return; }
-  if (job.status === 'done') return render(job.render);
-  setTimeout(() => poll(id), 500);
+// Poll the job until it is done or failed. A few unreachable polls in a row
+// are tolerated (flaky mobile networks); after that, stop and say so.
+async function poll(id, misses) {
+  let job;
+  try {
+    const r = await fetch('/api/tryons/' + id);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    job = await r.json();
+  } catch (e) {
+    if (misses >= 10) return finish('Lost contact with the server. Reload to check your try-on.', true);
+    return setTimeout(() => poll(id, misses + 1), 1000);
+  }
+  if (job.status === 'failed') return finish('Try-on failed. ' + (job.error || 'Please try again.'), true);
+  if (job.status === 'done') { finish(`done · $${job.cost_usd.toFixed(3)}`); return render(job.render); }
+  setStatus(`${job.status}${job.step ? ' · ' + job.step : ''} · $${job.cost_usd.toFixed(3)}`);
+  setTimeout(() => poll(id, 0), 500);
 }
 
 // Draw the engine's render if there is one; otherwise (FakeEngine) paste the

@@ -1,39 +1,15 @@
-"""Try-on engines.
+"""Compatibility alias: the engines moved to the fitter.engines package.
 
-Only FakeEngine exists. It returns no image, and the web client composites the
-garment over the selfie itself. The plan's real engines (FASHN primary, fal
-fallback) are not wired in yet.
+`from fitter.engine import X` keeps working; new code should import from
+fitter.engines.
 """
-from __future__ import annotations
+from .engines import (  # noqa: F401
+    FAL_QUEUE_URL, FAL_TRYON_APP, FASHN_BASE_URL,
+    EngineError, EngineResult, EngineTimeout, FakeEngine, FalEngine, FashnEngine, TryOnEngine,
+)
 
-from dataclasses import dataclass
-from typing import Optional, Protocol
-
-from .schemas import Garment
-
-
-class EngineError(RuntimeError):
-    pass
-
-
-@dataclass
-class EngineResult:
-    image: Optional[str]  # data URL or http(s) URL of the render; None = client composites
-    cost_usd: float
-
-
-class TryOnEngine(Protocol):
-    name: str
-
-    def generate(self, selfie: str, garment: Garment) -> EngineResult: ...
-
-
-class FakeEngine:
-    name = "fake"
-
-    def __init__(self, cost_usd: float = 0.075) -> None:
-        # Charged as if it were FASHN v1.6 on demand, so cost reports look realistic.
-        self.cost_usd = cost_usd
-
-    def generate(self, selfie: str, garment: Garment) -> EngineResult:
-        return EngineResult(image=None, cost_usd=self.cost_usd)
+__all__ = [
+    "EngineError", "EngineResult", "EngineTimeout", "TryOnEngine",
+    "FakeEngine", "FashnEngine", "FalEngine",
+    "FASHN_BASE_URL", "FAL_QUEUE_URL", "FAL_TRYON_APP",
+]

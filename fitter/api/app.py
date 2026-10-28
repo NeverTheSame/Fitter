@@ -21,8 +21,9 @@ from pathlib import Path
 from ..config import Settings
 from ..costs import CostLog
 from ..credits import FreeTierLedger
-from ..engine import FakeEngine, TryOnEngine
+from ..engines import TryOnEngine
 from ..garments import garment_from_url
+from ..router import Router, build_engine
 from ..schemas import TryOnJob, ValidationError, parse_tryon_request
 from ..store import InMemoryJobStore
 from ..worker.pipeline import Pipeline
@@ -46,20 +47,17 @@ class App:
     ledger: FreeTierLedger
     costs: CostLog
     worker: Worker
+    engine: TryOnEngine
 
 
 def build_app(settings: Settings, engine: TryOnEngine | None = None) -> App:
+    """Raises ConfigError if settings.engine needs a key that is not set."""
+    engine = engine or build_engine(settings)
     store = InMemoryJobStore()
     ledger = FreeTierLedger(settings.free_tryons)
     costs = CostLog()
-    pipeline = Pipeline(
-        engine=engine or FakeEngine(),
-        store=store,
-        costs=costs,
-        step_delay_s=settings.step_delay_s,
-        on_failed=lambda job: ledger.refund(job.user_id),
-    )
-    return App(settings, store, ledger, costs, Worker(pipeline))
+    pipeline = Pipeline(engine=engine, store=store, costs=costs, ledger=ledger, step_delay_s=settings.step_delay_s)
+    return App(settings, store, ledger, costs, Worker(pipeline), engine)
 
 
 def make_handler(app: App) -> type[BaseHTTPRequestHandler]:
@@ -138,7 +136,10 @@ def make_handler(app: App) -> type[BaseHTTPRequestHandler]:
             self._send_file(STATIC_DIR / "index.html", "text/html; charset=utf-8")
 
         def healthz(self) -> None:
-            self._send_json(HTTPStatus.OK, {"ok": True})
+            body: dict = {"ok": True, "engine": app.engine.name}
+            if isinstance(app.engine, Router):
+                body["engines"] = app.engine.status()
+            self._send_json(HTTPStatus.OK, body)
 
         def me(self) -> None:
             user = self._user_id()

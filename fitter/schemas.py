@@ -73,6 +73,9 @@ class CostEvent:
     step: str
     cost_usd: float
     engine: Optional[str] = None
+    # True when the charge is the engine's guess (a render we stopped waiting
+    # for that the vendor probably bills), not a known price for a delivered render.
+    estimated: bool = False
     at: datetime = field(default_factory=utcnow)
 
 
@@ -85,7 +88,9 @@ class TryOnJob:
     status: JobStatus = JobStatus.QUEUED
     step: Optional[str] = None
     cost_usd: float = 0.0
-    error: Optional[str] = None
+    error: Optional[str] = None  # short, user-facing
+    error_detail: Optional[str] = None  # the step and exception, for logs and support; not public
+    refunded: bool = False  # the credit taken for this job has been given back (at most once)
     render: Optional[str] = None
     created_at: datetime = field(default_factory=utcnow)
     updated_at: datetime = field(default_factory=utcnow)

@@ -37,6 +37,19 @@ class InMemoryJobStore:
             job.updated_at = utcnow()
             return job
 
+    def claim_refund(self, job_id: str) -> bool:
+        """Mark the job's credit as refunded. True the first time, False after
+        that, atomically, so a refund cannot be paid twice for one job."""
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                raise JobNotFound(job_id)
+            if job.refunded:
+                return False
+            job.refunded = True
+            job.updated_at = utcnow()
+            return True
+
     def list_for_user(self, user_id: str) -> list[TryOnJob]:
         with self._lock:
             jobs = [j for j in self._jobs.values() if j.user_id == user_id]
